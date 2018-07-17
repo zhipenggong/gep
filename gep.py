@@ -375,6 +375,19 @@ def intel_gpu_freq_change(fp, line):
     ce = counter_event("gpu_freq", args, timestamp, thread_id, thread_id)
     ce.write_json()
 
+'''
+weston-231   [000] ....   155.595359: drm_log: I915_GEM_BUSY
+'''
+def parse_drm_log(line):
+    if 'drm_log: E' in line:
+        line = line.replace("drm_log", "tracing_mark_write")
+        return line
+
+    orig_line = line
+    thread_name, thread_id, timestamp, line = thread_info(line)
+    items = line.split()
+    str = 'tracing_mark_write: B|%d|' % thread_id
+    return orig_line.replace('drm_log: ', str)
 
 def parse_trace(trace_file):
     print("parse ftrace...")
@@ -453,6 +466,9 @@ def cut_ftrace(trace_file):
             cut_fp.write(line)
         elif 'gep_log: E' in line:
             line = line.replace("gep_log", "tracing_mark_write")
+            cut_fp.write(line)
+        elif 'drm_log:' in line:
+            line = parse_drm_log(line)
             cut_fp.write(line)
         else:
             for filter in ftrace_filters:
