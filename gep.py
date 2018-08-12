@@ -25,7 +25,16 @@ PID_NAMES = {
 multiplier = 0.0
 cpuref = 0
 gpuref = 0
+first_ts = 0
+tsc_hz = 1881600000
 
+def convert_ts(ts):
+    global first_ts
+    if first_ts == 0:
+        first_ts = ts
+        return 0
+    else:
+        return (ts - first_ts) / tsc_hz
 
 class SetEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -169,7 +178,19 @@ def thread_info(line):
     thread_name = thread_info[: index]
 
     thread_names[thread_id] = thread_name
-    return thread_name, thread_id, float(timestamp) * 1000000, line
+
+    return thread_name, thread_id, convert_ts(int(timestamp)) * 1000000, line
+
+def find_timestamp(line):
+    index = line.find('[')
+    rest = line[index:]
+    items = rest.split()
+    timestamp = items[2][:-1]
+    return timestamp
+
+def convert_line(line):
+    ts = find_timestamp(line)
+    return line.replace(ts, '%.6f' % convert_ts(int(ts)))
 
 def param_to_hash(params):
     params_hash = {}
@@ -194,7 +215,7 @@ def i915_gep_read_req(fp, line):
     thread_name, thread_id, timestamp, line = thread_info(line)
     items = line.split()
     params = param_to_hash(items[5:])
-    cputime     = float(items[2][:-1]) * 1000000            # in us
+    cputime     = timestamp                                 # in us
     gputime     = int(params['gpu_time'], 16)               # in cycle
     gpustart    = int(params['start'], 16)                  # in cycle
     gpuend      = int(params['end'], 16)                    # in cycle
@@ -414,6 +435,8 @@ def cut_ftrace(trace_file):
         line = fp.readline()
         if not line:
             break
+        if not line.startswith('#'):
+            line = convert_line(line)
         if not line.startswith('#') and first_record:
             items = line.split()
             new_line = line[:line.find(": ") + 2] + "tracing_mark_write: trace_event_clock_sync: parent_ts=%s\n" % items[3][:-1]
