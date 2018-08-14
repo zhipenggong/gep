@@ -484,8 +484,12 @@ def init(platform):
   
 def parse_acrntrace():
     global first_ts
+    acrntrace_path = './'
+    if not os.path.isfile(acrntrace_path + '0.txt'):
+        print("acrntrace file 0.txt does not exist!")
+        return
     acrn_trace.vmlinux_dir = None
-    vm_exits = acrn_trace.parse_vmexit('.')
+    vm_exits = acrn_trace.parse_vmexit(acrntrace_path)
     df = pandas.DataFrame(vm_exits)
     first_ts = df['exit_ts'].min()
     print('first ts is ' + str(first_ts))
@@ -497,8 +501,7 @@ def parse_acrntrace():
         de.dur = '%.6f' % row['dur']
         de.args = { 'desc' : row['desc'], 'exit_ts' : row['exit_ts'], 'enter_ts' : row['enter_ts'], 'rip' : row['guest_rip']}
         de.write_json()
-    
-    
+
 def parse(trace_file):
     parse_acrntrace()
     cut_ftrace(trace_file)
