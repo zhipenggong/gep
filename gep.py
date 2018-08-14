@@ -13,7 +13,7 @@ ENGINE_NAMES = ["Render", "VDBOX1", "BLT", "VEBOX", "VDBOX2"]
 inject_events = collections.defaultdict(list)
 json_fd = None;
 trace_events = []
-ftrace_filters = ["sched", "tracing_mark_write", "irq_handler_"]
+ftrace_filters = ["sched", "tracing_mark_write", "irq_handler_", "i915_reg_rw"]
 log_filters = ["gen8_de_irq_handler", "inject_preempt_context", "execlists_submit_ports", "unwind_incomplete_requests"]
 thread_names = {}
 i915_gem_requests = {}
@@ -221,8 +221,9 @@ def i915_gep_read_req(fp, line):
     args["prio"] = params["prio"]
     args["global_seqno"] = params["global_seqno"]
     args["preempted"] = preempted
-#    args["guest_context"] = params["guest_context"]
-#    args["guest_seqno"] = params["guest_seqno"]
+    if "guest_context" in params:
+        args["guest_context"] = params["guest_context"]
+        args["guest_seqno"] = params["guest_seqno"]
     args["submit"] = []
 
     for i in range(len(request.submits)):
@@ -455,7 +456,7 @@ def cut_ftrace(trace_file):
             break
         if not line.startswith('#') and first_record:
             items = line.split()
-            new_line = line[:line.find(":") + 2] + "tracing_mark_write: trace_event_clock_sync: parent_ts=%s\n" % items[3][:-1]
+            new_line = line[:line.find(": ") + 2] + "tracing_mark_write: trace_event_clock_sync: parent_ts=%s\n" % items[3][:-1]
             start_timestamp = float(items[3][:-1])
             cut_fp.write(new_line)
             first_record = False
