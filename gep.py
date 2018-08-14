@@ -7,9 +7,10 @@ import copy
 import zipfile
 import argparse
 import pandas
+import acrn_trace
 
 bb_timing_records = []
-ENGINE_NAMES = ["Render", "VDBOX1", "BLT", "VEBOX", "VDBOX2"]
+ENGINE_NAMES = ["Render", "BLT", "VDBOX1", "VDBOX2", "VEBOX"]
 inject_events = collections.defaultdict(list)
 json_fd = None;
 trace_events = []
@@ -20,7 +21,8 @@ i915_gem_requests = {}
 start_timestamp = 0.0        #in seconds
 PID_NAMES = {
     "GPU Engines" : 999999,
-    "GPU Frequency" : -100
+    "GPU Frequency" : -100,
+    "Acrn" : 1000000
 }
 multiplier = 0.0
 cpuref = 0
@@ -435,6 +437,8 @@ def cut_ftrace(trace_file):
         line = fp.readline()
         if not line:
             break
+        if line.strip() == '':
+            continue
         if not line.startswith('#'):
             line = convert_line(line)
         if not line.startswith('#') and first_record:
@@ -477,7 +481,26 @@ def init(platform):
         multiplier = 52.083
     del bb_timing_records[:]
 
+  
+def parse_acrntrace():
+    global first_ts
+    acrn_trace.vmlinux_dir = None
+    vm_exits = acrn_trace.parse_vmexit('.')
+    df = pandas.DataFrame(vm_exits)
+    first_ts = df['exit_ts'].min()
+    print('first ts is ' + str(first_ts))
+    df['dur'] = df['delta'] * 1000000 / tsc_hz
+    df['start'] = (df['exit_ts'] - first_ts) * 1000000 / tsc_hz
+    print(df)
+    for index, row in df.iterrows():
+        de = duration_event(row['reason'], '', '%.6f' % row['start'], row['cpu'], PID_NAMES['Acrn'])
+        de.dur = '%.6f' % row['dur']
+        de.args = { 'desc' : row['desc'], 'exit_ts' : row['exit_ts'], 'enter_ts' : row['enter_ts'], 'rip' : row['guest_rip']}
+        de.write_json()
+    
+    
 def parse(trace_file):
+    parse_acrntrace()
     cut_ftrace(trace_file)
     parse_trace(trace_file)
     calculate_bb_timing()
