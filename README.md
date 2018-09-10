@@ -1,6 +1,12 @@
 # gep
 gep tool includes some helper scripts for Graphics Event Profiler
 
+## Kernel Patches
+https://github.com/projectacrn/acrn-kernel/commit/3c21350101578db2d347403d04e525326e73370f
+https://github.com/projectacrn/acrn-kernel/commit/6e6bdab215487cebe8bf554fe288fc2f43b3d035
+https://github.com/projectacrn/acrn-kernel/commit/12f9e8f83bfa62812109927a60d71e3bc0f5a456
+https://github.com/projectacrn/acrn-kernel/commit/8c10f2fcedfab3a57f1d16617ecf9823cbdabecc
+
 ## Prerequisites
 1. Python 3
 * On Ubuntu, run this command
