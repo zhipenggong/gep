@@ -155,7 +155,7 @@ def calcute_bb_timing():
 gvt workload 0-89    [000] ....   196.196106: i915_gep_read_req: 		
 '''
 def thread_info(line): 
-    index = line.find('[')
+    index = 23
     thread_info = line[:index]
     line = line[index:]
     items = line.split()
