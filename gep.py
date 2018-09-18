@@ -118,9 +118,12 @@ def summary_bb_timing(df):
     print(bb_timing)
 
     
-def calcute_bb_timing():
+def calculate_bb_timing():
     gpu_utils = []
     df = pandas.DataFrame(bb_timing_records)
+    if not 'engine' in df.columns:
+        print('No hw engine events, skip bb timing calculation')
+        return
     engine_grouped = df.groupby(["engine"])
     pandas.options.display.float_format = '{:,.2f}'.format
     engines = df["engine"].unique()
@@ -497,7 +500,7 @@ def init(platform):
 def parse(trace_file):
     cut_ftrace(trace_file)
     parse_trace(trace_file)
-    calcute_bb_timing()
+    calculate_bb_timing()
     dump_json()
     generate_zipfile(trace_file)
     return
