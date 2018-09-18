@@ -1,5 +1,13 @@
-# gep
-gep tool includes some helper scripts for Graphics Event Profiler
+# Graphics Event Profiler
+Graphics Event Profiler(gep) is mainly for gpu performance tuning,
+which includes two parts: kernel patches and helper scripts.
+
+## Sample
+Please browse the sample to check whether the tool meets your requirement.
+1. Open sample.zip through chrome://tracing.
+2. Navigate through keyboard and mouse
+* w/s: Zoom in/out
+* a/d: Pan left/right
 
 ## Kernel Patches
 https://github.com/projectacrn/acrn-kernel/commit/3c21350101578db2d347403d04e525326e73370f
@@ -7,7 +15,7 @@ https://github.com/projectacrn/acrn-kernel/commit/6e6bdab215487cebe8bf554fe288fc
 https://github.com/projectacrn/acrn-kernel/commit/12f9e8f83bfa62812109927a60d71e3bc0f5a456
 https://github.com/projectacrn/acrn-kernel/commit/8c10f2fcedfab3a57f1d16617ecf9823cbdabecc
 
-## Prerequisites
+## Prerequisites for scripts
 1. Python 3
 * On Ubuntu, run this command
 ```
