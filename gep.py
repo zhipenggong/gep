@@ -205,9 +205,9 @@ def i915_gep_read_req(fp, line):
     if request is None:
         return
     preempted   = int(request.preempted)
-    if cpuref == 0:
-        cpuref = cputime
-        gpuref = gputime
+    #if cpuref == 0:
+    cpuref = cputime
+    gpuref = gputime
 
     start = transform_gpu_to_cpu_time(cpuref, gpuref, gpustart)     # in us
     end = transform_gpu_to_cpu_time(cpuref, gpuref, gpuend)
@@ -240,38 +240,8 @@ def i915_gep_read_req(fp, line):
 
     node_ts = []                    # in us
     node_dur = []                   # in us
-    if preempted != 0:
-        '''
-        inject_times = []
-        for t in inject_events[engine]:
-            if t > gpustart and t < gpuend:
-                inject_times.append(t)
-        if len(inject_times) != int(params["preempted"]):
-            print("Preempted times does not match")
-            print(line)
-
-        if request.preempted != int(params["preempted"]):
-            print("Preempted times does not match")
-            print(line)
-        '''
-        tmp_unwinds = [0.0] + unwind_times + [end]
-        for i in range(len(unwind_times) + 1):
-            tmp_submit = find_submit_time(submit_times, tmp_unwinds[i], tmp_unwinds[i + 1])
-            node_ts.append(tmp_submit)
-            node_dur.append(tmp_unwinds[i + 1] - tmp_submit)
-
-        node_ts[0] = start
-        node["dur"] = "%.3f" % node_dur[0]
-        args["total duration"] = "%.3f us" % (sum(node_dur))
-
-        for i in range(1, len(node_ts)):
-            node1 = copy.deepcopy(node)
-            node1["ts"] = ("%.3f") % (node_ts[i])       #in us
-            node1["dur"] = ("%.3f") % (node_dur[i])     #in us
-            trace_events.append(node1)
-    else:
-        node_ts.append(start)
-        node_dur.append(gpudur)
+    node_ts.append(start)
+    node_dur.append(gpudur)
 
     args["total duration"] = "%.3f us" % (sum(node_dur))
     trace_events.append(node)
@@ -286,13 +256,13 @@ def i915_gep_read_req(fp, line):
     bb_timing_records.append(record)	
 
 '''
-weston-204   [000] ....  5630.695055: i915_gem_request_add: dev=0, ring=0, ctx=29, seqno=333715, global=0
+glmark2-es2-way-383   [002] ....   370.958786: i915_request_add: dev=0, engine=0:0, hw_id=6, ctx=44, seqno=17313, global=0
 '''
-def i915_gem_request_add(fp, line):
+def i915_request_add(fp, line):
     thread_name, thread_id, timestamp, line = thread_info(line)
     items = line.split()
     args = items[5:]
-    ie = instant_event("i915_gem_request_add", args, timestamp, thread_id, thread_id)
+    ie = instant_event("i915_request_add", args, timestamp, thread_id, thread_id)
     ie.write_json()
     params = param_to_hash(items[5:])
     key = params['ctx'][:-1] + '-' + params['seqno'][:-1]
@@ -301,17 +271,6 @@ def i915_gem_request_add(fp, line):
         return
     request = i915_gem_request(params['ctx'], params['seqno'], timestamp)
     i915_gem_requests[key] = request
-
-'''
-weston-212   [000] d.s2  2007.747787: i915_gem_request_in: dev=0, ring=0, ctx=29, seqno=118649, global=237297, port=0
-'''
-def i915_gem_request_in(fp, line):
-    thread_name, thread_id, timestamp, line = thread_info(line)
-    items = line.split()
-    args = items[5:]
-    ie = instant_event("i915_gem_request_in", args, timestamp, thread_id, thread_id)
-    ie.write_json()
-
 
 def inject_preempt_context(fp, line):
     thread_name, thread_id, timestamp, line = thread_info(line)
@@ -402,10 +361,8 @@ def parse_trace(trace_file):
             break
         if "i915_gep_read_req" in line:
             i915_gep_read_req(fp, line)
-        elif "i915_gem_request_add:" in line:
-            i915_gem_request_add(fp, line)
-        elif "i915_gem_request_in" in line:
-            i915_gem_request_in(fp, line)
+        elif "i915_request_add:" in line:
+            i915_request_add(fp, line)
         elif "gen8_de_irq_handler vblank" in line:
             vblank(fp, line)
         elif "inject_preempt_context" in line:
