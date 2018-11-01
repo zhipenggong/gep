@@ -1,0 +1,65 @@
+From 642f4a85d522787d221a3fb499b02148f3774dbf Mon Sep 17 00:00:00 2001
+From: Zhipeng Gong <zhipeng.gong@intel.com>
+Date: Tue, 17 Jul 2018 10:10:22 +0800
+Subject: [PATCH 4/4] drm: add trace event for drm ioctl
+
+Signed-off-by: Zhipeng Gong <zhipeng.gong@intel.com>
+---
+ drivers/gpu/drm/drm_ioctl.c |  3 +++
+ drivers/gpu/drm/drm_trace.h | 12 ++++++++++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/drivers/gpu/drm/drm_ioctl.c b/drivers/gpu/drm/drm_ioctl.c
+index 248dfa53fce1..4c1ade5205f7 100644
+--- a/drivers/gpu/drm/drm_ioctl.c
++++ b/drivers/gpu/drm/drm_ioctl.c
+@@ -34,6 +34,7 @@
+ #include "drm_legacy.h"
+ #include "drm_internal.h"
+ #include "drm_crtc_internal.h"
++#include "drm_trace.h"
+ 
+ #include <linux/pci.h>
+ #include <linux/export.h>
+@@ -816,6 +817,7 @@ long drm_ioctl(struct file *filp,
+ 		  task_pid_nr(current),
+ 		  (long)old_encode_dev(file_priv->minor->kdev->devt),
+ 		  file_priv->authenticated, ioctl->name);
++	trace_drm_log(ioctl->name);
+ 
+ 	/* Do not trust userspace, use our own definition */
+ 	func = ioctl->func;
+@@ -859,6 +861,7 @@ long drm_ioctl(struct file *filp,
+ 		kfree(kdata);
+ 	if (retcode)
+ 		DRM_DEBUG("pid=%d, ret = %d\n", task_pid_nr(current), retcode);
++	trace_drm_log("E");
+ 	return retcode;
+ }
+ EXPORT_SYMBOL(drm_ioctl);
+diff --git a/drivers/gpu/drm/drm_trace.h b/drivers/gpu/drm/drm_trace.h
+index baccc63db106..f635a3acb9d3 100644
+--- a/drivers/gpu/drm/drm_trace.h
++++ b/drivers/gpu/drm/drm_trace.h
+@@ -58,6 +58,18 @@ TRACE_EVENT(drm_vblank_event_delivered,
+ 		      __entry->seq)
+ );
+ 
++TRACE_EVENT(drm_log,
++	TP_PROTO(const char *msg),
++	TP_ARGS(msg),
++	TP_STRUCT__entry(
++		__string(msg, msg)
++	),
++	TP_fast_assign(
++		__assign_str(msg, msg);
++	),
++	TP_printk("%s", __get_str(msg))
++);
++
+ #endif /* _DRM_TRACE_H_ */
+ 
+ /* This part must be outside protection */
+-- 
+2.19.1
+

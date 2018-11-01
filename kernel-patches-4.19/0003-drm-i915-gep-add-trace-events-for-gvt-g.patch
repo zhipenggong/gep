@@ -1,0 +1,158 @@
+From 9b8f439b6cbe430723302682731d265d5d326f4a Mon Sep 17 00:00:00 2001
+From: Zhipeng Gong <zhipeng.gong@intel.com>
+Date: Thu, 1 Nov 2018 09:34:26 +0800
+Subject: [PATCH 3/4] drm/i915/gep: add trace events for gvt-g
+
+---
+ drivers/gpu/drm/i915/gvt/execlist.c  |  2 ++
+ drivers/gpu/drm/i915/gvt/gtt.c       |  5 +++++
+ drivers/gpu/drm/i915/gvt/interrupt.c |  3 +++
+ drivers/gpu/drm/i915/gvt/mmio.c      | 10 +++++++++-
+ drivers/gpu/drm/i915/gvt/scheduler.c |  6 ++++++
+ 5 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/i915/gvt/execlist.c b/drivers/gpu/drm/i915/gvt/execlist.c
+index 70494e394d2c..c85a18ddf4e7 100644
+--- a/drivers/gpu/drm/i915/gvt/execlist.c
++++ b/drivers/gpu/drm/i915/gvt/execlist.c
+@@ -451,6 +451,7 @@ static int submit_context(struct intel_vgpu *vgpu, int ring_id,
+ 	workload->prepare = prepare_execlist_workload;
+ 	workload->complete = complete_execlist_workload;
+ 	workload->emulate_schedule_in = emulate_schedule_in;
++	i915_gep_start_trace("submit_context workload=%px", workload);
+ 
+ 	if (emulate_schedule_in)
+ 		workload->elsp_dwords = s->execlist[ring_id].elsp_dwords;
+@@ -459,6 +460,7 @@ static int submit_context(struct intel_vgpu *vgpu, int ring_id,
+ 			emulate_schedule_in);
+ 
+ 	intel_vgpu_queue_workload(workload);
++	i915_gep_end_trace();
+ 	return 0;
+ }
+ 
+diff --git a/drivers/gpu/drm/i915/gvt/gtt.c b/drivers/gpu/drm/i915/gvt/gtt.c
+index 5d46957d43ea..ec194d66b7bc 100644
+--- a/drivers/gpu/drm/i915/gvt/gtt.c
++++ b/drivers/gpu/drm/i915/gvt/gtt.c
+@@ -787,7 +787,10 @@ static int ppgtt_write_protection_handler(
+ 	if (bytes != 4 && bytes != 8)
+ 		return -EINVAL;
+ 
++	i915_gep_start_trace("ppgtt_write_protection gpa=%llx data=%llx bytes=%d",
++		gpa, *(u64 *)data, bytes);
+ 	ret = ppgtt_handle_guest_write_page_table_bytes(spt, gpa, data, bytes);
++	i915_gep_end_trace();
+ 	if (ret)
+ 		return ret;
+ 	return ret;
+@@ -2491,7 +2494,9 @@ int intel_vgpu_emulate_ggtt_mmio_write(struct intel_vgpu *vgpu,
+ 		return -EINVAL;
+ 
+ 	off -= info->gtt_start_offset;
++	i915_gep_start_trace("gtt off=%x", off);
+ 	ret = emulate_ggtt_mmio_write(vgpu, off, p_data, bytes);
++	i915_gep_end_trace();
+ 	return ret;
+ }
+ 
+diff --git a/drivers/gpu/drm/i915/gvt/interrupt.c b/drivers/gpu/drm/i915/gvt/interrupt.c
+index 06ce906b6673..5af996e3bbeb 100644
+--- a/drivers/gpu/drm/i915/gvt/interrupt.c
++++ b/drivers/gpu/drm/i915/gvt/interrupt.c
+@@ -639,7 +639,10 @@ void intel_vgpu_trigger_virtual_event(struct intel_vgpu *vgpu,
+ 	handler = get_event_virt_handler(irq, event);
+ 	WARN_ON(!handler);
+ 
++	i915_gep_start_trace("trigger_virtual_event vgpu=%d event=%s(%d)\n",
++				vgpu->id, irq_name[event], event);
+ 	handler(irq, event, vgpu);
++	i915_gep_end_trace();
+ 
+ 	ops->check_pending_irq(vgpu);
+ }
+diff --git a/drivers/gpu/drm/i915/gvt/mmio.c b/drivers/gpu/drm/i915/gvt/mmio.c
+index 8a28db93bb1e..f7e4b320245a 100644
+--- a/drivers/gpu/drm/i915/gvt/mmio.c
++++ b/drivers/gpu/drm/i915/gvt/mmio.c
+@@ -109,6 +109,8 @@ int intel_vgpu_emulate_mmio_read(struct intel_vgpu *vgpu, uint64_t pa,
+ 		failsafe_emulate_mmio_rw(vgpu, pa, p_data, bytes, true);
+ 		return 0;
+ 	}
++	i915_gep_start_trace("emulate_mmio_read pa=%llx p_data=%llx bytes=%d",
++		pa, *(u64 *)p_data, bytes);
+ 	mutex_lock(&vgpu->vgpu_lock);
+ 
+ 	offset = intel_vgpu_gpa_to_mmio_offset(vgpu, pa);
+@@ -145,8 +147,10 @@ int intel_vgpu_emulate_mmio_read(struct intel_vgpu *vgpu, uint64_t pa,
+ 	}
+ 
+ 	ret = intel_vgpu_mmio_reg_rw(vgpu, offset, p_data, bytes, true);
+-	if (ret < 0)
++	if (ret < 0) {
++		i915_gep_end_trace();
+ 		goto err;
++	}
+ 
+ 	intel_gvt_mmio_set_accessed(gvt, offset);
+ 	ret = 0;
+@@ -157,6 +161,7 @@ int intel_vgpu_emulate_mmio_read(struct intel_vgpu *vgpu, uint64_t pa,
+ 			offset, bytes);
+ out:
+ 	mutex_unlock(&vgpu->vgpu_lock);
++	i915_gep_end_trace();
+ 	return ret;
+ }
+ 
+@@ -182,6 +187,8 @@ int intel_vgpu_emulate_mmio_write(struct intel_vgpu *vgpu, uint64_t pa,
+ 		return 0;
+ 	}
+ 
++	i915_gep_start_trace("emulate_mmio_write pa=%llx p_data=%llx bytes=%d",
++		pa, *(u64 *)p_data, bytes);
+ 	mutex_lock(&vgpu->vgpu_lock);
+ 
+ 	offset = intel_vgpu_gpa_to_mmio_offset(vgpu, pa);
+@@ -229,6 +236,7 @@ int intel_vgpu_emulate_mmio_write(struct intel_vgpu *vgpu, uint64_t pa,
+ 		     bytes);
+ out:
+ 	mutex_unlock(&vgpu->vgpu_lock);
++	i915_gep_end_trace();
+ 	return ret;
+ }
+ 
+diff --git a/drivers/gpu/drm/i915/gvt/scheduler.c b/drivers/gpu/drm/i915/gvt/scheduler.c
+index 63766248c04d..8910407d46da 100644
+--- a/drivers/gpu/drm/i915/gvt/scheduler.c
++++ b/drivers/gpu/drm/i915/gvt/scheduler.c
+@@ -651,7 +651,9 @@ static int prepare_workload(struct intel_vgpu_workload *workload)
+ 
+ 	update_shadow_pdps(workload);
+ 
++	i915_gep_start_trace("sync_oos_pages");
+ 	ret = intel_vgpu_sync_oos_pages(workload->vgpu);
++	i915_gep_end_trace();
+ 	if (ret) {
+ 		gvt_vgpu_err("fail to vgpu sync oos pages\n");
+ 		goto err_unpin_mm;
+@@ -731,6 +733,9 @@ static int dispatch_workload(struct intel_vgpu_workload *workload)
+ 
+ 	if (ret)
+ 		goto out;
++	i915_gep_start_trace("dispatch workload=%px fence_ctx=%llu seqno=%u",
++		workload, workload->req->fence.context,
++		workload->req->fence.seqno);
+ 
+ 	ret = prepare_workload(workload);
+ 
+@@ -750,6 +755,7 @@ static int dispatch_workload(struct intel_vgpu_workload *workload)
+ 
+ 	mutex_unlock(&dev_priv->drm.struct_mutex);
+ 	mutex_unlock(&vgpu->vgpu_lock);
++	i915_gep_end_trace();
+ 	return ret;
+ }
+ 
+-- 
+2.19.1
+
