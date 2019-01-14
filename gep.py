@@ -14,7 +14,7 @@ ENGINE_NAMES = ["Render", "BLT", "VDBOX1", "VDBOX2", "VEBOX"]
 inject_events = collections.defaultdict(list)
 json_fd = None;
 trace_events = []
-ftrace_filters = ["sched", "tracing_mark_write", "irq_handler_", "i915_reg_rw"]
+ftrace_filters = ["sched", "tracing_mark_write", "irq_handler_", "i915_reg_rw", "softirq_"]
 log_filters = ["gen8_de_irq_handler", "inject_preempt_context", "execlists_submit_ports", "unwind_incomplete_requests"]
 thread_names = {}
 i915_gem_requests = {}
@@ -190,9 +190,24 @@ def find_timestamp(line):
     timestamp = items[2][:-1]
     return timestamp
 
+def find_timestamp1(line):
+    index = line.find(': ')
+    rest = line[0:index]
+    items = rest.split()
+    timestamp = items[-1]
+    return timestamp
+
+ftrace_lines=collections.defaultdict(list)
+
 def convert_line(line):
-    ts = find_timestamp(line)
-    return line.replace(ts, '%.6f' % convert_ts(int(ts)))
+    global start_ftrace
+    ts = int(find_timestamp1(line))
+    if ts < tsc_hz * 10:
+        l = line.replace(str(ts), '%.6f' % convert_ts(ts))
+        ftrace_lines[ts].append(l)
+        return l
+    else:
+        return None
 
 def param_to_hash(params):
     params_hash = {}
@@ -428,7 +443,7 @@ def dump_json():
         json.dump(gpu_trace, outfile, indent=2, sort_keys=True, cls=SetEncoder)
 
 def cut_ftrace(trace_file):
-    global start_timestamp
+    global start_timestamp, ftrace_lines
     print("cut ftrace...")
     fp = open(trace_file)
     cut_fp = open("cut.ftrace", "w")
@@ -441,13 +456,17 @@ def cut_ftrace(trace_file):
             continue
         if not line.startswith('#'):
             line = convert_line(line)
+         
+        if line == None:
+            continue
+            
         if not line.startswith('#') and first_record:
             items = line.split()
             new_line = line[:line.find(": ") + 2] + "tracing_mark_write: trace_event_clock_sync: parent_ts=%s\n" % items[3][:-1]
             start_timestamp = float(items[3][:-1])
             cut_fp.write(new_line)
             first_record = False
-        elif line.startswith('#'):
+        if line.startswith('#'):
             cut_fp.write(line)
         elif 'gep_log: B' in line:
             line = line.replace("gep_log", "tracing_mark_write")
@@ -459,9 +478,17 @@ def cut_ftrace(trace_file):
             line = parse_drm_log(line)
             cut_fp.write(line)
         else:
+            pass
+            '''
             for filter in ftrace_filters:
                 if filter in line:
                     cut_fp.write(line)
+            '''
+    od = collections.OrderedDict(sorted(ftrace_lines.items()))
+    for k, v in od.items():
+        for l in v:
+            cut_fp.write(l)
+
 
 def generate_zipfile(trace_file):
     filename = os.path.splitext(os.path.basename(trace_file))[0] + '.zip'
@@ -505,7 +532,7 @@ def parse_acrntrace():
 def parse(trace_file):
     parse_acrntrace()
     cut_ftrace(trace_file)
-    parse_trace(trace_file)
+    #parse_trace(trace_file)
     calculate_bb_timing()
     dump_json()
     generate_zipfile(trace_file)

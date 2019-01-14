@@ -47,7 +47,7 @@ exit_reasons = {
     0x00000019 : '0x00000019',
     0x0000001A : '0x0000001A',
     0x0000001B : '0x0000001B',
-    0x0000001C : '0x0000001C',
+    0x0000001C : 'CR_ACCESS',
     0x0000001D : '0x0000001D',
     0x0000001E : 'IO_INSTRUCTION',
     0x0000001F : 'RDMSR',
@@ -60,7 +60,7 @@ exit_reasons = {
     0x00000028 : '0x00000028',
     0x00000029 : '0x00000029',
     0x0000002B : '0x0000002B',
-    0x0000002C : '0x0000002C',
+    0x0000002C : 'APIC_ACCESS',
     0x0000002D : 'VIRTUALIZED_EOI',
     0x0000002E : '0x0000002E',
     0x0000002F : '0x0000002F',
@@ -70,8 +70,8 @@ exit_reasons = {
     0x00000033 : '0x00000033',
     0x00000034 : '0x00000034',
     0x00000035 : '0x00000035',
-    0x00000036 : '0x00000036',
-    0x00000037 : '0x00000037',
+    0x00000036 : 'WBINVD',
+    0x00000037 : 'XSETBV',
     0x00000038 : 'APIC_WRITE',
     0x00000039 : '0x00000039',
     0x0000003A : '0x0000003A',
@@ -115,6 +115,9 @@ def parse_cpu(trace_file):
             cpu = int(items[0][3:])
             evid = int(items[1], 16)
             ts = int(items[2])
+            if ts > tsc_hz * 10:
+                continue
+            
             desc = line[line.find(items[2]) + len(items[2]):]
             if vm_exit[cpu] is None:
                 if 'vmexit' in desc:
@@ -126,8 +129,8 @@ def parse_cpu(trace_file):
                 if (ts < args['exit_ts']):
                     vm_exit[cpu] = None
                     continue
-                if 'timer' in desc:
-                    continue
+                #if 'timer' in desc:
+                #    continue
 
                 if 'vmenter' in desc:
                     if vmlinux_dir is not None and 'VMEXIT_EXTERNAL_INTERRUPT' !=  args['reason']:
@@ -137,7 +140,7 @@ def parse_cpu(trace_file):
                     vm_exits.append(args)
                     vm_exit[cpu] = None
                 else:
-                    args['desc'] += desc.strip()
+                    args['desc'] += desc.strip() + '; '
 
 def parse_ept(cpu_df, reason, csv_file):
     ept = cpu_df[cpu_df.reason == reason].groupby(['func', 'desc'])
@@ -153,10 +156,11 @@ def parse_vmexit(trace_dir):
 
 def parse(trace_dir):
     df = pandas.DataFrame(parse_vmexit(trace_dir))
-    print(df)
-    
-    pandas.options.display.float_format = '{:,.2f}'.format
 
+    pandas.options.display.float_format = '{:,.0f}'.format
+    cpu_group = df.groupby(['cpu'])
+    print(cpu_group['exit_ts'].describe()[['count', 'min', 'max']])
+    
     reason_group = df.groupby(['reason'])
     print(reason_group['delta'].describe()[['count', 'mean', 'min', 'max']])
     summary_csv = 'vm_exit_summary.csv'    
