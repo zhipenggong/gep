@@ -7,7 +7,5 @@ echo 1 > /sys/kernel/debug/tracing/events/irq/irq_handler_exit/enable
 echo 1 > /sys/kernel/debug/tracing/events/irq/softirq_entry/enable
 echo 1 > /sys/kernel/debug/tracing/events/irq/softirq_exit/enable
 echo 1 > /sys/kernel/debug/tracing/events/workqueue/enable
-echo 1 > /sys/kernel/debug/tracing/events/i915/gep_log/enable
-echo 0 > /sys/kernel/debug/tracing/events/i915/i915_reg_rw/enable
-echo 1 > /sys/kernel/debug/tracing/events/drm/drm_log/enable
+echo 1 > /sys/kernel/debug/tracing/events/i915/enable
 echo 1 > /sys/kernel/debug/tracing/tracing_on

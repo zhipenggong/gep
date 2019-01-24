@@ -181,7 +181,12 @@ def thread_info(line):
 
     thread_names[thread_id] = thread_name
 
-    return thread_name, thread_id, convert_ts(int(timestamp)) * 1000000, line
+    return thread_name, thread_id, float(timestamp) * 1000000, line
+
+def find_thread_id(line): 
+    thread_info = line[:23]
+    index = thread_info.rfind("-")
+    return thread_info[index + 1 :]
 
 def find_timestamp(line):
     index = line.find('[')
@@ -203,11 +208,48 @@ def convert_line(line):
     global start_ftrace
     ts = int(find_timestamp1(line))
     if ts < tsc_hz * 10:
-        l = line.replace(str(ts), '%.6f' % convert_ts(ts))
-        ftrace_lines[ts].append(l)
-        return l
+        line = line.replace(str(ts), '%.6f' % convert_ts(ts))
+        if 'gep_log: B' in line:
+            line = line.replace("gep_log", "tracing_mark_write")
+        elif 'gep_log: E' in line:
+            line = line.replace("gep_log", "tracing_mark_write")
+        elif 'drm_log:' in line:
+            line = parse_drm_log(line)
+
+        ftrace_lines[ts].append(line)
+        return line
     else:
         return None
+
+def convert_uos_line(line):
+    global start_ftrace
+    ts = int(find_timestamp1(line))
+    if ts < tsc_hz * 10:
+  
+        line = line.replace(str(ts), '%.6f' % convert_ts(ts))
+        
+        if ' [000] ' in line:
+            line = line.replace(" [000] ", " [001] ")
+        elif ' [001] ' in line:
+            line = line.replace(" [001] ", " [002] ")
+        elif ' [002] ' in line:
+            line = line.replace(" [002] ", " [003] ")
+            
+        if ' target_cpu=000' in line:
+            line = line.replace(" target_cpu=000", " target_cpu=001")
+        elif ' target_cpu=001' in line:
+            line = line.replace(" target_cpu=001", " target_cpu=002")
+        elif ' target_cpu=002' in line:
+            line = line.replace(" target_cpu=002", " target_cpu=003")
+
+        if "i915_request_execute" in line:
+            i915_request_execute(line)            
+        elif "i915_request_retire" in line:
+            i915_request_retire(line)             
+        ftrace_lines[ts].append('UOS: ' + line)
+        return line
+    else:
+        return None    
 
 def param_to_hash(params):
     params_hash = {}
@@ -376,6 +418,21 @@ def intel_gpu_freq_change(fp, line):
     ce = counter_event("gpu_freq", args, timestamp, thread_id, thread_id)
     ce.write_json()
 
+def i915_request_execute(line):
+    thread_name, thread_id, timestamp, line = thread_info(line)
+    items = line.split()
+    args = items[5:]
+    ie = instant_event("i915_request_execute", args, timestamp, thread_id, thread_id)
+    ie.write_json()
+
+def i915_request_retire(line):
+    thread_name, thread_id, timestamp, line = thread_info(line)
+    items = line.split()
+    args = items[5:]
+    ie = instant_event("i915_request_retire", args, timestamp, thread_id, thread_id)
+    ie.write_json()
+    
+
 '''
 weston-231   [000] ....   155.595359: drm_log: I915_GEM_BUSY
 '''
@@ -385,9 +442,8 @@ def parse_drm_log(line):
         return line
 
     orig_line = line
-    thread_name, thread_id, timestamp, line = thread_info(line)
-    items = line.split()
-    str = 'tracing_mark_write: B|%d|' % thread_id
+    thread_id = find_thread_id(line)
+    str = 'tracing_mark_write: B|%s|' % thread_id
     return orig_line.replace('drm_log: ', str)
 
 def parse_trace(trace_file):
@@ -468,22 +524,18 @@ def cut_ftrace(trace_file):
             first_record = False
         if line.startswith('#'):
             cut_fp.write(line)
-        elif 'gep_log: B' in line:
-            line = line.replace("gep_log", "tracing_mark_write")
-            cut_fp.write(line)
-        elif 'gep_log: E' in line:
-            line = line.replace("gep_log", "tracing_mark_write")
-            cut_fp.write(line)
-        elif 'drm_log:' in line:
-            line = parse_drm_log(line)
-            cut_fp.write(line)
-        else:
-            pass
-            '''
-            for filter in ftrace_filters:
-                if filter in line:
-                    cut_fp.write(line)
-            '''
+
+
+    fp = open('trace_uos')
+    while True:
+        line = fp.readline()
+        if not line:
+            break
+        if line.strip() == '':
+            continue
+        if not line.startswith('#'):
+            line = convert_uos_line(line)   
+    
     od = collections.OrderedDict(sorted(ftrace_lines.items()))
     for k, v in od.items():
         for l in v:
@@ -530,7 +582,7 @@ def parse_acrntrace():
         de.write_json()
 
 def parse(trace_file):
-    parse_acrntrace()
+    #parse_acrntrace()
     cut_ftrace(trace_file)
     #parse_trace(trace_file)
     calculate_bb_timing()
