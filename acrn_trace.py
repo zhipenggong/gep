@@ -115,8 +115,6 @@ def parse_cpu(trace_file):
             cpu = int(items[0][3:])
             evid = int(items[1], 16)
             ts = int(items[2])
-            if ts > tsc_hz * 10:
-                continue
             
             desc = line[line.find(items[2]) + len(items[2]):]
             if vm_exit[cpu] is None:

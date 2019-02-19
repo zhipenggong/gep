@@ -181,7 +181,7 @@ def thread_info(line):
 
     thread_names[thread_id] = thread_name
 
-    return thread_name, thread_id, convert_ts(int(timestamp)) * 1000000, line
+    return thread_name, thread_id, float(timestamp) * 1000000, line
 
 def find_timestamp(line):
     index = line.find('[')
@@ -202,12 +202,9 @@ ftrace_lines=collections.defaultdict(list)
 def convert_line(line):
     global start_ftrace
     ts = int(find_timestamp1(line))
-    if ts < tsc_hz * 10:
-        l = line.replace(str(ts), '%.6f' % convert_ts(ts))
-        ftrace_lines[ts].append(l)
-        return l
-    else:
-        return None
+    l = line.replace(str(ts), '%.6f' % convert_ts(ts))
+    ftrace_lines[ts].append(l)
+    return l
 
 def param_to_hash(params):
     params_hash = {}
