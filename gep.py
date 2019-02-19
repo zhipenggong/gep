@@ -207,49 +207,43 @@ ftrace_lines=collections.defaultdict(list)
 def convert_line(line):
     global start_ftrace
     ts = int(find_timestamp1(line))
-    if ts < tsc_hz * 10:
-        line = line.replace(str(ts), '%.6f' % convert_ts(ts))
-        if 'gep_log: B' in line:
-            line = line.replace("gep_log", "tracing_mark_write")
-        elif 'gep_log: E' in line:
-            line = line.replace("gep_log", "tracing_mark_write")
-        elif 'drm_log:' in line:
-            line = parse_drm_log(line)
+    line = line.replace(str(ts), '%.6f' % convert_ts(ts))
+    if 'gep_log: B' in line:
+        line = line.replace("gep_log", "tracing_mark_write")
+    elif 'gep_log: E' in line:
+        line = line.replace("gep_log", "tracing_mark_write")
+    elif 'drm_log:' in line:
+        line = parse_drm_log(line)
 
-        ftrace_lines[ts].append(line)
-        return line
-    else:
-        return None
+    ftrace_lines[ts].append(line)
+    return line
 
 def convert_uos_line(line):
     global start_ftrace
     ts = int(find_timestamp1(line))
-    if ts < tsc_hz * 10:
   
-        line = line.replace(str(ts), '%.6f' % convert_ts(ts))
+    line = line.replace(str(ts), '%.6f' % convert_ts(ts))
         
-        if ' [000] ' in line:
-            line = line.replace(" [000] ", " [001] ")
-        elif ' [001] ' in line:
-            line = line.replace(" [001] ", " [002] ")
-        elif ' [002] ' in line:
-            line = line.replace(" [002] ", " [003] ")
+    if ' [000] ' in line:
+        line = line.replace(" [000] ", " [001] ")
+    elif ' [001] ' in line:
+        line = line.replace(" [001] ", " [002] ")
+    elif ' [002] ' in line:
+        line = line.replace(" [002] ", " [003] ")
             
-        if ' target_cpu=000' in line:
-            line = line.replace(" target_cpu=000", " target_cpu=001")
-        elif ' target_cpu=001' in line:
-            line = line.replace(" target_cpu=001", " target_cpu=002")
-        elif ' target_cpu=002' in line:
-            line = line.replace(" target_cpu=002", " target_cpu=003")
+    if ' target_cpu=000' in line:
+        line = line.replace(" target_cpu=000", " target_cpu=001")
+    elif ' target_cpu=001' in line:
+        line = line.replace(" target_cpu=001", " target_cpu=002")
+    elif ' target_cpu=002' in line:
+        line = line.replace(" target_cpu=002", " target_cpu=003")
 
-        if "i915_request_execute" in line:
-            i915_request_execute(line)            
-        elif "i915_request_retire" in line:
-            i915_request_retire(line)             
-        ftrace_lines[ts].append('UOS: ' + line)
-        return line
-    else:
-        return None    
+    if "i915_request_execute" in line:
+        i915_request_execute(line)            
+    elif "i915_request_retire" in line:
+        i915_request_retire(line)             
+    ftrace_lines[ts].append('UOS: ' + line)
+    return line
 
 def param_to_hash(params):
     params_hash = {}
