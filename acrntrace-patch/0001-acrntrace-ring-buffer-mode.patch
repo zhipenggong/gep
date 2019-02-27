@@ -1,0 +1,169 @@
+From 14be79dd23a570072ec33d0890aef6df063de6d1 Mon Sep 17 00:00:00 2001
+From: Zhipeng Gong <zhipeng.gong@intel.com>
+Date: Mon, 14 Jan 2019 08:56:25 +0800
+Subject: [PATCH] acrntrace - ring buffer mode
+
+---
+ tools/acrntrace/acrntrace.c | 63 +++++++++++++++++++++++++++----------
+ tools/acrntrace/acrntrace.h |  1 +
+ 2 files changed, 48 insertions(+), 16 deletions(-)
+
+diff --git a/tools/acrntrace/acrntrace.c b/tools/acrntrace/acrntrace.c
+index 03078a44..1ce06665 100644
+--- a/tools/acrntrace/acrntrace.c
++++ b/tools/acrntrace/acrntrace.c
+@@ -28,15 +28,17 @@ static uint32_t timeout = 0;
+ static int exiting = 0;
+ 
+ /* for opt */
+-static uint64_t period = 10000;
+-static const char optString[] = "i:hct:";
++static uint64_t period = 500000;
++static const char optString[] = "i:hcr:t:";
+ static const char dev_prefix[] = "acrn_trace_";
+ 
+ static uint32_t flags;
+-static char trace_file_dir[TRACE_FILE_DIR_LEN];
++char trace_file_dir[TRACE_FILE_DIR_LEN];
+ 
+ static reader_struct *reader;
+ static int dev_cnt = 0; /* Count of /dev/acrn_trace_xxx devices */
++static uint32_t ring_buffer_size = 16 * 1024 * 1024;
++static int running = 1;
+ 
+ static void display_usage(void)
+ {
+@@ -113,6 +115,15 @@ static int parse_opt(int argc, char *argv[])
+ 			timeout = ret;
+ 			pr_dbg("Capture trace data for at most %ds\n", ret);
+ 			break;
++		case 'r':
++			ret = strtol(optarg, NULL, 10);
++			if (ret <= 0) {
++				pr_err("'-r' require integer greater than 0\n");
++				return -EINVAL;
++			}
++			ring_buffer_size = ret * 1024 * 1024;
++			pr_dbg("Ring buffer size is %dM\n", ret);
++			break;
+ 		case 'c':
+ 			flags |= FLAG_CLEAR_BUF;
+ 			break;
+@@ -152,7 +163,7 @@ static int get_dev_cnt(void)
+ 	return cnt;
+ }
+ 
+-static int create_trace_file_dir(char *dir)
++int create_trace_file_dir(char *dir)
+ {
+ 	int err = 0, ret;
+ 	char time_str[TIME_STR_LEN + 1];
+@@ -210,6 +221,16 @@ static void reader_fn(param_t * param)
+ 	int fd = param->trace_fd;
+ 	shared_buf_t *sbuf = param->sbuf;
+ 
++	int pos = 0;
++
++	if (ring_buffer_size != 0) {
++		param->buffer = malloc(ring_buffer_size);
++		if (!param->buffer) {
++			perror("Failed to allocate ring buffer\n");
++			return;
++		}
++	}
++
+ 	pr_dbg("reader thread[%lu] created for FILE*[0x%p]\n",
+ 	       pthread_self(), fp);
+ 
+@@ -220,9 +241,15 @@ static void reader_fn(param_t * param)
+ 	if (flags & FLAG_CLEAR_BUF)
+ 		sbuf_clear_buffered(sbuf);
+ 
+-	while (1) {
++	while (running) {
+ 		do {
+-			ret = sbuf_write(fd, sbuf);
++			if (ring_buffer_size != 0) {
++				ret = sbuf_get(sbuf, param->buffer + pos);
++				pos += sbuf->ele_size;
++				if (pos + sbuf->ele_size > ring_buffer_size)
++					pos = 0;
++			} else
++				ret = sbuf_write(fd, sbuf);
+ 		} while (ret > 0);
+ 
+ 		usleep(period);
+@@ -259,7 +286,7 @@ static int create_reader(reader_struct * reader, uint32_t dev_id)
+ 	       dev_id, reader->param.sbuf->magic, reader->param.sbuf->ele_num,
+ 	       reader->param.sbuf->ele_size);
+ 
+-	if(snprintf(trace_file_name, TRACE_FILE_NAME_LEN, "%s/%d", trace_file_dir,
++	if(snprintf(trace_file_name, TRACE_FILE_NAME_LEN, "./%d",
+ 		 dev_id) >= TRACE_FILE_NAME_LEN)
+ 		printf("WARN: trace file name is truncated\n");
+ 	reader->param.trace_fd = open(trace_file_name,
+@@ -291,6 +318,17 @@ static void destory_reader(reader_struct * reader)
+ 			reader->thrd = 0;
+ 	}
+ 
++	if (ring_buffer_size != 0 && reader->param.buffer) {
++		int ret;
++
++		ret = write(reader->param.trace_fd, reader->param.buffer,
++						ring_buffer_size);
++		if (ret != ring_buffer_size) {
++			perror("Failed to write ring buffer\n");
++		}
++		free(reader->param.buffer);
++	}
++
+ 	if (reader->param.sbuf) {
+ 		munmap(reader->param.sbuf, MMAP_SIZE);
+ 		reader->param.sbuf = NULL;
+@@ -315,6 +353,7 @@ static void handle_on_exit(void)
+ 		return;
+ 
+ 	pr_info("exiting - to release resources...\n");
++	running = 0;
+ 
+ 	foreach_dev(dev_id)
+ 	    destory_reader(&reader[dev_id]);
+@@ -347,12 +386,6 @@ int main(int argc, char *argv[])
+ 		exit(EXIT_FAILURE);
+ 	}
+ 
+-	/* create dir for trace file */
+-	if (create_trace_file_dir(trace_file_dir)) {
+-		pr_err("Failed to create dir for trace files\n");
+-		exit(EXIT_FAILURE);
+-	}
+-
+ 	/* Set timer if timeout configured */
+ 	if (timeout) {
+ 		err = init_timer(timeout);
+@@ -375,9 +408,7 @@ int main(int argc, char *argv[])
+ 	signal(SIGINT, signal_exit_handler);
+ 
+ 	/* wait for user input to stop */
+-	printf("q <enter> to quit:\n");
+-	while (!exiting && getchar() != 'q')
+-		printf("q <enter> to quit:\n");
++	sleep(3600 * 24 * 7);
+ 
+  out_free:
+ 	foreach_dev(dev_id)
+diff --git a/tools/acrntrace/acrntrace.h b/tools/acrntrace/acrntrace.h
+index 748bb9be..56e98621 100644
+--- a/tools/acrntrace/acrntrace.h
++++ b/tools/acrntrace/acrntrace.h
+@@ -76,6 +76,7 @@ typedef struct {
+ 	int trace_fd;
+ 	shared_buf_t *sbuf;
+ 	pthread_mutex_t *sbuf_lock;
++	uint8_t *buffer;
+ } param_t;
+ 
+ typedef struct {
+-- 
+2.19.1
+
