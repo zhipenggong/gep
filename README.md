@@ -2,6 +2,9 @@
 Graphics Event Profiler(gep) is mainly for gpu performance tuning,
 which includes two parts: kernel patches and helper scripts.
 
+## Presentation
+https://drive.google.com/drive/folders/1mnpNg4Qya9cgTqE-dUvNvc1ikxmw_UaD
+
 ## Sample
 Please browse the sample to check whether the tool meets your requirement.
 1. Open sample.zip through chrome://tracing.
